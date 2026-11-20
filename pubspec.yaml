@@ -1,0 +1,29 @@
+name: book_reader
+description: "The Reading Room (placeholder name) — a quiet, library-vibe mobile book reader. Android-first MVP: EPUB/PDF/TXT, shelves, 3 page themes, Focus Mode."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.9.0
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  file_picker: ^8.3.7
+  path_provider: ^2.1.5
+  shared_preferences: ^2.5.3
+  epubx: ^4.0.0
+  pdfx: ^2.9.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/sample_books/the-library-at-dusk.txt
+    - assets/sample_books/pride-and-prejudice.txt
+    - assets/sample_books/the-library-at-dusk.epub
