@@ -59,48 +59,55 @@ class ShelfRow extends StatelessWidget {
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    ...books.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final book = entry.value;
-                      return _ShelfDropTarget(
-                        // A spine never accepts itself: dropping a book
-                        // back where it started is a no-op, so a plain
-                        // long-press-and-release falls through to the
-                        // book menu instead of a phantom reorder.
+            // The scroll view gives this child unbounded width, so a
+            // stretch Column on its own would force its children to an
+            // infinite width and crash layout. IntrinsicWidth sizes the
+            // Column to the Row of spines, so the plank below stretches
+            // to exactly the shelf's width.
+            child: IntrinsicWidth(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      ...books.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final book = entry.value;
+                        return _ShelfDropTarget(
+                          // A spine never accepts itself: dropping a book
+                          // back where it started is a no-op, so a plain
+                          // long-press-and-release falls through to the
+                          // book menu instead of a phantom reorder.
+                          accept: (dragged) =>
+                              enableDrop && dragged.id != book.id,
+                          onAccept: (dragged) =>
+                              onReorder(dragged, shelf.id, index),
+                          child: _DraggableSpine(
+                            book: book,
+                            onOpen: () => onOpen(book),
+                            onLongPressMenu: () => onLongPressMenu(book),
+                          ),
+                        );
+                      }),
+                      // Empty plank space at the end of the row: dropping
+                      // here appends the book to this shelf.
+                      _ShelfDropTarget(
                         accept: (dragged) =>
-                            enableDrop && dragged.id != book.id,
+                            enableDrop &&
+                            !(books.isNotEmpty &&
+                                books.last.id == dragged.id &&
+                                dragged.shelfId == shelf.id),
                         onAccept: (dragged) =>
-                            onReorder(dragged, shelf.id, index),
-                        child: _DraggableSpine(
-                          book: book,
-                          onOpen: () => onOpen(book),
-                          onLongPressMenu: () => onLongPressMenu(book),
-                        ),
-                      );
-                    }),
-                    // Empty plank space at the end of the row: dropping
-                    // here appends the book to this shelf.
-                    _ShelfDropTarget(
-                      accept: (dragged) =>
-                          enableDrop &&
-                          !(books.isNotEmpty &&
-                              books.last.id == dragged.id &&
-                              dragged.shelfId == shelf.id),
-                      onAccept: (dragged) =>
-                          onReorder(dragged, shelf.id, books.length),
-                      child: const SizedBox(width: 72, height: 120),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 0),
-                _Plank(seed: shelf.id.hashCode),
-              ],
+                            onReorder(dragged, shelf.id, books.length),
+                        child: const SizedBox(width: 72, height: 120),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 0),
+                  _Plank(seed: shelf.id.hashCode),
+                ],
+              ),
             ),
           ),
         ],
@@ -163,7 +170,6 @@ class _DraggableSpine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final spine = BookSpine(book: book);
     return Padding(
       padding: const EdgeInsets.only(right: 6),
       child: LongPressDraggable<Book>(
@@ -176,7 +182,10 @@ class _DraggableSpine extends StatelessWidget {
             child: BookSpine(book: book, lifted: true),
           ),
         ),
-        childWhenDragging: Opacity(opacity: 0.3, child: spine),
+        // Distinct spine instances for the two slots: the child and
+        // childWhenDragging are never mounted at once, but sharing one
+        // widget instance between them is fragile.
+        childWhenDragging: Opacity(opacity: 0.3, child: BookSpine(book: book)),
         // Long-press and release without moving shows the book menu
         // (move to shelf / remove). Long-press and drag reorders.
         onDragEnd: (details) {
@@ -184,7 +193,7 @@ class _DraggableSpine extends StatelessWidget {
         },
         child: GestureDetector(
           onTap: onOpen,
-          child: spine,
+          child: BookSpine(book: book),
         ),
       ),
     );
