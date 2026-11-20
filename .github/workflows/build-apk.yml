@@ -1,0 +1,32 @@
+# Build the Android debug APK on GitHub Actions.
+# Why: the Muse VM sandbox blocks Gradle's Java daemon (loopback TCP),
+# so `flutter build apk` cannot run there. GitHub's runners are unrestricted.
+# Usage: push this repo to GitHub, the workflow runs automatically on every
+# push to main, and the APK is downloadable from the run's Artifacts.
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.35.7"
+          channel: stable
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter build apk --debug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
