@@ -31,6 +31,7 @@ class Book {
   int totalPages;
   int lastOpenedMillis;
   final int addedAtMillis;
+  int order; // position on its shelf; lower = further left
   final List<int> bookmarks; // page indexes
   final List<Highlight> highlights;
 
@@ -46,6 +47,7 @@ class Book {
     this.totalPages = 1,
     this.lastOpenedMillis = 0,
     required this.addedAtMillis,
+    this.order = 0,
     List<int>? bookmarks,
     List<Highlight>? highlights,
   })  : bookmarks = bookmarks ?? [],
@@ -63,6 +65,7 @@ class Book {
         'totalPages': totalPages,
         'lastOpenedMillis': lastOpenedMillis,
         'addedAtMillis': addedAtMillis,
+        'order': order,
         'bookmarks': bookmarks,
         'highlights': highlights.map((h) => h.toJson()).toList(),
       };
@@ -82,6 +85,11 @@ class Book {
         totalPages: (j['totalPages'] as num?)?.toInt() ?? 1,
         lastOpenedMillis: (j['lastOpenedMillis'] as num?)?.toInt() ?? 0,
         addedAtMillis: (j['addedAtMillis'] as num?)?.toInt() ?? 0,
+        // Books saved before v2 have no order; fall back to when they
+        // were added so old libraries keep a sensible shelf order.
+        order: (j['order'] as num?)?.toInt() ??
+            (j['addedAtMillis'] as num?)?.toInt() ??
+            0,
         bookmarks: ((j['bookmarks'] as List?) ?? [])
             .map((e) => (e as num).toInt())
             .toList(),

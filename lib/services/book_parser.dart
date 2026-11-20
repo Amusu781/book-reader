@@ -1,5 +1,7 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:epubx/epubx.dart';
+import 'package:flutter/material.dart';
 import '../models/book.dart';
 
 class Chapter {
@@ -12,6 +14,16 @@ class ParsedBook {
   final String text;
   final List<Chapter> chapters;
   ParsedBook(this.text, this.chapters);
+}
+
+/// One page of measured text: the exact char range in the parsed text
+/// plus the (trimmed) text to render. Pages never scroll — each one is
+/// measured to fit the real page box exactly.
+class TextPage {
+  final int start;
+  final int end;
+  final String text;
+  const TextPage(this.start, this.end, this.text);
 }
 
 /// Reads EPUB / TXT files into plain text. PDF is rendered separately
@@ -90,26 +102,131 @@ class BookParser {
     return s.trim();
   }
 
-  /// Split [text] into page-sized chunks at word boundaries.
-  static List<String> paginate(String text, int charsPerPage) {
-    if (text.isEmpty) return [''];
-    final pages = <String>[];
+  /// Split [text] into pages that each fit exactly inside a box of
+  /// [pageSize] when rendered with [style] (and [textScaler], matching
+  /// the Text widget that will render the page). Splits happen at word
+  /// boundaries; a page never overflows — leftover text flows to the
+  /// next page. Each page records its start char offset in the full
+  /// text so the table of contents can jump to the exact page.
+  static List<TextPage> paginateMeasured(
+    String text,
+    TextStyle style,
+    Size pageSize, {
+    TextScaler textScaler = TextScaler.noScaling,
+  }) {
+    if (text.isEmpty) return const [TextPage(0, 0, '')];
+    final pages = <TextPage>[];
     var start = 0;
-    while (start < text.length) {
-      var end = (start + charsPerPage).clamp(0, text.length);
-      if (end < text.length) {
-        final lastSpace = text.lastIndexOf(' ', end);
-        if (lastSpace > start + 200) end = lastSpace;
+    final n = text.length;
+    while (start < n) {
+      // Skip blank lines / spaces at the top of a new page.
+      while (start < n && (text[start] == '\n' || text[start] == ' ')) {
+        start++;
       }
-      pages.add(text.substring(start, end).trim());
-      start = end;
+      if (start >= n) break;
+      final end = _fitEnd(text, start, style, pageSize, textScaler);
+      final pageText = text.substring(start, end).trimRight();
+      pages.add(TextPage(start, end, pageText));
+      // Guard against zero progress (e.g. a single unbreakable word
+      // wider than the page — TextPainter wraps it, so _fitEnd always
+      // advances, but never loop forever).
+      start = end > start ? end : start + 1;
     }
+    if (pages.isEmpty) pages.add(const TextPage(0, 0, ''));
     return pages;
   }
 
-  static int charsPerPageForFontSize(double fontSize) {
-    // Rough estimate: larger font -> fewer characters per page.
-    // 18sp ~= 1600 chars; scale inversely.
-    return (1600 * 18 / fontSize).round().clamp(700, 2600);
+  /// Largest end offset in (start, text.length] whose substring fits
+  /// inside [pageSize] when laid out with [style]. Binary search around
+  /// a rough estimate so a whole book costs only a few layouts per page.
+  static int _fitEnd(
+    String text,
+    int start,
+    TextStyle style,
+    Size pageSize,
+    TextScaler textScaler,
+  ) {
+    final n = text.length;
+    final fontSize = style.fontSize ?? 18;
+    final lineHeight = (style.height ?? 1.6) * fontSize;
+    // Rough estimate: ~0.5em average char width, one line per lineHeight.
+    final charsPerLine =
+        math.max(10, (pageSize.width / (fontSize * 0.5)).floor());
+    final linesPerPage = math.max(1, (pageSize.height / lineHeight).floor());
+    var estimate = charsPerLine * linesPerPage;
+    estimate = estimate.clamp(1, n - start);
+
+    bool fits(int end) {
+      final tp = TextPainter(
+        text: TextSpan(text: text.substring(start, end), style: style),
+        textDirection: TextDirection.ltr,
+        textScaler: textScaler,
+      )..layout(maxWidth: pageSize.width);
+      return tp.size.height <= pageSize.height + 0.5;
+    }
+
+    int end;
+    if (fits(start + estimate)) {
+      // Fits: grow towards the true limit (cap the search window).
+      var lo = start + estimate;
+      var hi = math.min(n, start + (estimate * 2));
+      if (hi == n && fits(n)) return _wordBoundary(text, start, n);
+      while (lo < hi) {
+        final mid = (lo + hi + 1) ~/ 2;
+        if (fits(mid)) {
+          lo = mid;
+        } else {
+          hi = mid - 1;
+        }
+      }
+      end = lo;
+    } else {
+      // Does not fit: shrink towards the true limit.
+      var lo = start + 1;
+      var hi = start + estimate;
+      while (lo < hi) {
+        final mid = (lo + hi + 1) ~/ 2;
+        if (fits(mid)) {
+          lo = mid;
+        } else {
+          hi = mid - 1;
+        }
+      }
+      end = lo;
+    }
+    return _wordBoundary(text, start, end);
+  }
+
+  /// Pull [end] back to the previous word boundary so a word is never
+  /// split across pages (unless it is a single word longer than a page).
+  static int _wordBoundary(String text, int start, int end) {
+    if (end >= text.length) return end;
+    if (end <= start) return end;
+    final atEnd = text[end];
+    final beforeEnd = text[end - 1];
+    bool isSpace(String c) => c == ' ' || c == '\n' || c == '\t';
+    if (isSpace(atEnd) || isSpace(beforeEnd)) return end;
+    var i = end - 1;
+    while (i > start && !isSpace(text[i])) {
+      i--;
+    }
+    // No space found before start+some margin: keep the measured end
+    // (TextPainter will wrap the long word mid-word, as a real book would).
+    if (i <= start + 10) return end;
+    return i;
+  }
+
+  /// Page index whose start offset is the last one <= [charOffset].
+  /// Used to jump the table of contents to the exact page.
+  static int pageForChar(List<TextPage> pages, int charOffset) {
+    var page = 0;
+    for (var i = 0; i < pages.length; i++) {
+      if (pages[i].start <= charOffset) {
+        page = i;
+      } else {
+        break;
+      }
+    }
+    return page;
   }
 }

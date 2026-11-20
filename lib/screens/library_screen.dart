@@ -2,11 +2,46 @@ import 'package:flutter/material.dart';
 import '../config.dart';
 import '../models/book.dart';
 import '../services/library_service.dart';
-import '../widgets/book_cover.dart';
+import '../widgets/bookshelf.dart';
+import '../widgets/library_background.dart';
 import 'pdf_reader_screen.dart';
 import 'reader_screen.dart';
 
-enum SortMode { title, author, recent, progress }
+enum SortMode { manual, title, author, recent, progress }
+
+enum BookFilter { all, continueReading, currentlyReading, finished, notStarted }
+
+extension on BookFilter {
+  String get label {
+    switch (this) {
+      case BookFilter.all:
+        return 'All books';
+      case BookFilter.continueReading:
+        return 'Continue reading';
+      case BookFilter.currentlyReading:
+        return 'Currently reading';
+      case BookFilter.finished:
+        return 'Finished';
+      case BookFilter.notStarted:
+        return 'Not started';
+    }
+  }
+
+  /// Progress 0 = not started, between 0 and 1 = reading, 1 = finished.
+  bool matches(Book book) {
+    switch (this) {
+      case BookFilter.all:
+        return true;
+      case BookFilter.continueReading:
+      case BookFilter.currentlyReading:
+        return book.progress > 0 && book.progress < 1;
+      case BookFilter.finished:
+        return book.progress >= 1;
+      case BookFilter.notStarted:
+        return book.progress <= 0;
+    }
+  }
+}
 
 class LibraryScreen extends StatefulWidget {
   final LibraryService library;
@@ -17,30 +52,42 @@ class LibraryScreen extends StatefulWidget {
 }
 
 class _LibraryScreenState extends State<LibraryScreen> {
-  String _shelfId = 'reading';
   String _query = '';
-  SortMode _sort = SortMode.recent;
+  SortMode _sort = SortMode.manual;
+  BookFilter _filter = BookFilter.all;
+
+  List<Book> _visibleBooks(List<Book> books) {
+    final filtered = books.where(_filter.matches).toList();
+    switch (_sort) {
+      case SortMode.manual:
+        // Shelf order (Book.order); "Continue reading" is recency-first.
+        if (_filter == BookFilter.continueReading) {
+          filtered.sort(
+            (a, b) => b.lastOpenedMillis.compareTo(a.lastOpenedMillis),
+          );
+        }
+      case SortMode.title:
+        filtered.sort((a, b) => a.title.compareTo(b.title));
+      case SortMode.author:
+        filtered.sort((a, b) => a.author.compareTo(b.author));
+      case SortMode.recent:
+        filtered.sort(
+          (a, b) => b.lastOpenedMillis.compareTo(a.lastOpenedMillis),
+        );
+      case SortMode.progress:
+        filtered.sort((a, b) => b.progress.compareTo(a.progress));
+    }
+    return filtered;
+  }
 
   @override
   Widget build(BuildContext context) {
     final library = widget.library;
-    final all = _query.isEmpty
-        ? library.booksOnShelf(_shelfId)
-        : library.search(_query);
-    final books = List<Book>.from(all);
-    switch (_sort) {
-      case SortMode.title:
-        books.sort((a, b) => a.title.compareTo(b.title));
-      case SortMode.author:
-        books.sort((a, b) => a.author.compareTo(b.author));
-      case SortMode.recent:
-        books.sort((a, b) => b.lastOpenedMillis.compareTo(a.lastOpenedMillis));
-      case SortMode.progress:
-        books.sort((a, b) => b.progress.compareTo(a.progress));
-    }
+    final filtering = _filter != BookFilter.all;
+    final searching = _query.isNotEmpty;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F1E3),
+      backgroundColor: const Color(0xFF2E2015),
       appBar: AppBar(
         backgroundColor: const Color(0xFF2E4A3D),
         foregroundColor: Colors.white,
@@ -52,14 +99,50 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ],
         ),
         actions: [
+          PopupMenuButton<BookFilter>(
+            icon: const Icon(Icons.filter_list),
+            tooltip: 'Filter by reading status',
+            onSelected: (v) => setState(() => _filter = v),
+            itemBuilder: (_) => BookFilter.values
+                .map(
+                  (f) => CheckedPopupMenuItem<BookFilter>(
+                    value: f,
+                    checked: _filter == f,
+                    child: Text(f.label),
+                  ),
+                )
+                .toList(),
+          ),
           PopupMenuButton<SortMode>(
             icon: const Icon(Icons.sort),
+            tooltip: 'Sort books',
             onSelected: (v) => setState(() => _sort = v),
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: SortMode.recent, child: Text('Recently read')),
-              PopupMenuItem(value: SortMode.title, child: Text('Title A–Z')),
-              PopupMenuItem(value: SortMode.author, child: Text('Author A–Z')),
-              PopupMenuItem(value: SortMode.progress, child: Text('Progress')),
+            itemBuilder: (_) => [
+              CheckedPopupMenuItem(
+                value: SortMode.manual,
+                checked: _sort == SortMode.manual,
+                child: const Text('Shelf order'),
+              ),
+              CheckedPopupMenuItem(
+                value: SortMode.recent,
+                checked: _sort == SortMode.recent,
+                child: const Text('Recently read'),
+              ),
+              CheckedPopupMenuItem(
+                value: SortMode.title,
+                checked: _sort == SortMode.title,
+                child: const Text('Title A–Z'),
+              ),
+              CheckedPopupMenuItem(
+                value: SortMode.author,
+                checked: _sort == SortMode.author,
+                child: const Text('Author A–Z'),
+              ),
+              CheckedPopupMenuItem(
+                value: SortMode.progress,
+                checked: _sort == SortMode.progress,
+                child: const Text('Progress'),
+              ),
             ],
           ),
           IconButton(
@@ -69,73 +152,31 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Search title or author…',
-                prefixIcon: const Icon(Icons.search),
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(24)),
+      body: LibraryBackground(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+              child: TextField(
+                decoration: InputDecoration(
+                  hintText: 'Search title or author…',
+                  prefixIcon: const Icon(Icons.search),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                ),
+                onChanged: (v) => setState(() => _query = v),
               ),
-              onChanged: (v) => setState(() => _query = v),
             ),
-          ),
-          SizedBox(
-            height: 44,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              children: library.shelves.map((shelf) {
-                final selected = shelf.id == _shelfId && _query.isEmpty;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: ChoiceChip(
-                    label: Text(shelf.name),
-                    selected: selected,
-                    onSelected: (_) => setState(() {
-                      _shelfId = shelf.id;
-                      _query = '';
-                    }),
-                  ),
-                );
-              }).toList(),
+            Expanded(
+              child: searching
+                  ? _buildSearchResults(library)
+                  : _buildShelves(library, filtering),
             ),
-          ),
-          Expanded(
-            child: books.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        _query.isEmpty
-                            ? 'No books on this shelf yet.\nTap + below to import an EPUB, PDF or TXT.'
-                            : 'No books match "$_query".',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.brown, fontSize: 15),
-                      ),
-                    ),
-                  )
-                : GridView.builder(
-                    padding: const EdgeInsets.all(12),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      childAspectRatio: 0.62,
-                      crossAxisSpacing: 10,
-                      mainAxisSpacing: 12,
-                    ),
-                    itemCount: books.length,
-                    itemBuilder: (_, i) => _BookTile(
-                      book: books[i],
-                      library: library,
-                      onOpen: () => _openBook(books[i]),
-                    ),
-                  ),
-          ),
-        ],
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: const Color(0xFF5D4037),
@@ -151,6 +192,133 @@ class _LibraryScreenState extends State<LibraryScreen> {
         },
       ),
     );
+  }
+
+  /// All shelves stacked vertically; scroll down for more shelves, each
+  /// shelf row scrolls sideways for more books.
+  Widget _buildShelves(LibraryService library, bool filtering) {
+    final sections = <Widget>[];
+    for (final shelf in library.shelves) {
+      final books = _visibleBooks(library.booksOnShelf(shelf.id));
+      // Hide shelves with no matching books while a filter is active;
+      // otherwise show every shelf, even an empty one.
+      if (books.isEmpty && filtering) continue;
+      sections.add(
+        ShelfRow(
+          shelf: shelf,
+          books: books,
+          onOpen: _openBook,
+          onLongPressMenu: _showBookMenu,
+          onReorder: _onReorder,
+        ),
+      );
+    }
+    if (sections.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            'No books match "${_filter.label}".',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70, fontSize: 15),
+          ),
+        ),
+      );
+    }
+    return ListView(
+      padding: const EdgeInsets.only(top: 12, bottom: 88),
+      children: [
+        ...sections,
+        _buildAddShelfTile(),
+        if (library.books.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'No books yet.\nTap "Import book" below to add an EPUB, PDF or TXT.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white70, fontSize: 15),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSearchResults(LibraryService library) {
+    final books = _visibleBooks(library.search(_query));
+    if (books.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            'No books match "$_query".',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70, fontSize: 15),
+          ),
+        ),
+      );
+    }
+    return ListView(
+      padding: const EdgeInsets.only(top: 12, bottom: 88),
+      children: [
+        ShelfRow(
+          shelf: Shelf(id: '__search__', name: 'Search results'),
+          books: books,
+          // Search results are not a real shelf: no reordering here,
+          // so a long-press still opens the book menu.
+          enableDrop: false,
+          onOpen: _openBook,
+          onLongPressMenu: _showBookMenu,
+          onReorder: _onReorder,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAddShelfTile() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: InkWell(
+        onTap: _addShelfDialog,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          height: 52,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.35),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.add, color: Colors.white.withValues(alpha: 0.85)),
+              const SizedBox(width: 8),
+              Text(
+                'Add shelf',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.85),
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _onReorder(
+    Book dragged,
+    String targetShelfId,
+    int targetIndex,
+  ) async {
+    // A search-results row is not a real shelf; dropping there does
+    // nothing (the book keeps its own shelf).
+    if (targetShelfId == '__search__') return;
+    await widget.library.moveBookToPosition(dragged, targetShelfId, targetIndex);
+    // A manual order now governs the shelf.
+    setState(() => _sort = SortMode.manual);
   }
 
   Future<void> _addShelfDialog() async {
@@ -186,53 +354,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
     setState(() {});
   }
-}
 
-class _BookTile extends StatelessWidget {
-  final Book book;
-  final LibraryService library;
-  final VoidCallback onOpen;
-  const _BookTile({required this.book, required this.library, required this.onOpen});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onOpen,
-      onLongPress: () => _showBookMenu(context),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(child: BookCover(book: book)),
-          const SizedBox(height: 4),
-          Text(
-            book.title,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-          ),
-          Text(
-            book.author,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 11, color: Colors.brown),
-          ),
-          const SizedBox(height: 2),
-          LinearProgressIndicator(
-            value: book.progress.clamp(0, 1),
-            backgroundColor: Colors.brown.shade100,
-            color: const Color(0xFF2E4A3D),
-            minHeight: 4,
-          ),
-          Text(
-            '${(book.progress * 100).round()}% read',
-            style: const TextStyle(fontSize: 10, color: Colors.brown),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _showBookMenu(BuildContext context) async {
+  Future<void> _showBookMenu(Book book) async {
     final shelfId = await showModalBottomSheet<String>(
       context: context,
       builder: (_) => SafeArea(
@@ -240,7 +363,7 @@ class _BookTile extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const ListTile(title: Text('Move to shelf…')),
-            ...library.shelves.map((s) => ListTile(
+            ...widget.library.shelves.map((s) => ListTile(
                   title: Text(s.name),
                   trailing: s.id == book.shelfId ? const Icon(Icons.check) : null,
                   onTap: () => Navigator.pop(context, s.id),
@@ -256,9 +379,9 @@ class _BookTile extends StatelessWidget {
     );
     if (shelfId == null) return;
     if (shelfId == '__delete__') {
-      await library.deleteBook(book);
+      await widget.library.deleteBook(book);
     } else {
-      await library.moveBook(book, shelfId);
+      await widget.library.moveBook(book, shelfId);
     }
   }
 }

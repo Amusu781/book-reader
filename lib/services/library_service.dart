@@ -83,12 +83,31 @@ class LibraryService extends ChangeNotifier {
           format: BookFormat.txt,
           shelfId: 'want',
           addedAtMillis: DateTime.now().millisecondsSinceEpoch,
+          order: _nextOrder('want'),
         ));
       } catch (_) {
         // A missing sample must not break first launch.
       }
     }
     await _save();
+  }
+
+  /// Next free order value on a shelf (orders step by 1000 so a drop
+  /// between two books never needs a full renumber).
+  int _nextOrder(String shelfId) {
+    var max = 0;
+    for (final b in books) {
+      if (b.shelfId == shelfId && b.order > max) max = b.order;
+    }
+    return max + 1000;
+  }
+
+  /// Renumber one shelf's books 0, 1000, 2000… in their list order.
+  void _renumberShelf(String shelfId, List<Book> ordered) {
+    for (var i = 0; i < ordered.length; i++) {
+      ordered[i].order = i * 1000;
+      ordered[i].shelfId = shelfId;
+    }
   }
 
   Future<String?> importBook() async {
@@ -115,6 +134,7 @@ class LibraryService extends ChangeNotifier {
       format: format,
       shelfId: 'want',
       addedAtMillis: DateTime.now().millisecondsSinceEpoch,
+      order: _nextOrder('want'),
     ));
     await _save();
     notifyListeners();
@@ -130,7 +150,35 @@ class LibraryService extends ChangeNotifier {
   }
 
   Future<void> moveBook(Book book, String shelfId) async {
+    final next = _nextOrder(shelfId);
     book.shelfId = shelfId;
+    book.order = next;
+    await _save();
+    notifyListeners();
+  }
+
+  /// Drag-and-drop: place [book] at [index] on [shelfId] (same shelf =
+  /// reorder, another shelf = move). [index] is the position in the
+  /// displayed shelf to insert *before*; [index] == shelf length means
+  /// append at the end. Orders on the affected shelf are renumbered
+  /// and persisted.
+  Future<void> moveBookToPosition(
+      Book book, String shelfId, int index) async {
+    final full = booksOnShelf(shelfId);
+    final draggedIndex = full.indexWhere((b) => b.id == book.id);
+    final target = full.where((b) => b.id != book.id).toList();
+    int at;
+    if (index >= full.length) {
+      at = target.length; // append at the end of the shelf
+    } else if (draggedIndex >= 0 && draggedIndex < index) {
+      // The dragged book sat before the target, so the target shifted
+      // one slot left when the book was lifted out.
+      at = index - 1;
+    } else {
+      at = index;
+    }
+    target.insert(at.clamp(0, target.length), book);
+    _renumberShelf(shelfId, target);
     await _save();
     notifyListeners();
   }
@@ -172,8 +220,11 @@ class LibraryService extends ChangeNotifier {
     notifyListeners();
   }
 
-  List<Book> booksOnShelf(String shelfId) =>
-      books.where((b) => b.shelfId == shelfId).toList();
+  List<Book> booksOnShelf(String shelfId) {
+    final list = books.where((b) => b.shelfId == shelfId).toList();
+    list.sort((a, b) => a.order.compareTo(b.order));
+    return list;
+  }
 
   List<Book> search(String query) {
     final q = query.trim().toLowerCase();
