@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:epubx/epubx.dart';
 import 'package:flutter/material.dart';
 import '../models/book.dart';
+import 'pdf_text.dart';
 
 class Chapter {
   final String title;
@@ -13,7 +14,14 @@ class Chapter {
 class ParsedBook {
   final String text;
   final List<Chapter> chapters;
-  ParsedBook(this.text, this.chapters);
+
+  /// For PDFs converted to reflowable text: the page map back to the
+  /// original PDF pages. Null for EPUB/TXT.
+  final PdfReflow? pdf;
+  ParsedBook(this.text, this.chapters, {this.pdf});
+
+  /// A PDF whose pages are images (scanned) — nothing to restyle.
+  bool get pdfHasNoText => pdf != null && !pdf!.hasText;
 }
 
 /// One page of measured text: the exact char range in the parsed text
@@ -26,8 +34,10 @@ class TextPage {
   const TextPage(this.start, this.end, this.text);
 }
 
-/// Reads EPUB / TXT files into plain text. PDF is rendered separately
-/// with pdfx (see PdfReaderScreen) — this parser returns empty text for PDF.
+/// Reads EPUB / TXT / PDF files into plain text for the restyleable
+/// reader. PDFs are converted with [PdfTextService] (cached); a PDF
+/// with no extractable text (scanned pages) comes back with
+/// [ParsedBook.pdfHasNoText] so the app can show the original layout.
 class BookParser {
   static Future<ParsedBook> parse(Book book) async {
     final file = File(book.filePath);
@@ -39,6 +49,7 @@ class BookParser {
       case BookFormat.epub:
         return _parseEpub(file);
       case BookFormat.pdf:
+        return _parsePdf(book.filePath);
       case BookFormat.unknown:
         return ParsedBook('', []);
     }
@@ -71,6 +82,20 @@ class BookParser {
     return ParsedBook(text, chapters);
   }
 
+  static Future<ParsedBook> _parsePdf(String path) async {
+    final reflow = await PdfTextService.load(path);
+    final chapters = <Chapter>[];
+    if (reflow.outline.isNotEmpty) {
+      for (final (title, page) in reflow.outline) {
+        chapters.add(Chapter(title, reflow.charForPage(page)));
+      }
+    } else {
+      chapters.addAll(_chaptersFromText(reflow.text));
+    }
+    if (chapters.isEmpty) chapters.add(Chapter('Start', 0));
+    return ParsedBook(reflow.text, chapters, pdf: reflow);
+  }
+
   static List<Chapter> _chaptersFromText(String text) {
     // Headings in all-caps / "Chapter N" lines become TOC entries.
     final chapters = <Chapter>[Chapter('Start', 0)];
@@ -89,7 +114,10 @@ class BookParser {
 
   static String _stripHtml(String html) {
     var s = html
-        .replaceAll(RegExp(r'<(br|p|h[1-6]|div|li)[^>]*>', caseSensitive: false), '\n')
+        .replaceAll(
+          RegExp(r'<(br|p|h[1-6]|div|li)[^>]*>', caseSensitive: false),
+          '\n',
+        )
         .replaceAll(RegExp(r'<[^>]+>'), '')
         .replaceAll('&nbsp;', ' ')
         .replaceAll('&amp;', '&')
@@ -150,8 +178,10 @@ class BookParser {
     final fontSize = style.fontSize ?? 18;
     final lineHeight = (style.height ?? 1.6) * fontSize;
     // Rough estimate: ~0.5em average char width, one line per lineHeight.
-    final charsPerLine =
-        math.max(10, (pageSize.width / (fontSize * 0.5)).floor());
+    final charsPerLine = math.max(
+      10,
+      (pageSize.width / (fontSize * 0.5)).floor(),
+    );
     final linesPerPage = math.max(1, (pageSize.height / lineHeight).floor());
     var estimate = charsPerLine * linesPerPage;
     estimate = estimate.clamp(1, n - start);

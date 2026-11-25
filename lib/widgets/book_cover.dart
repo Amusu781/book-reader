@@ -7,7 +7,12 @@ class BookCover extends StatelessWidget {
   final Book book;
   final double width;
   final double height;
-  const BookCover({super.key, required this.book, this.width = 110, this.height = 160});
+  const BookCover({
+    super.key,
+    required this.book,
+    this.width = 110,
+    this.height = 160,
+  });
 
   static const _palette = [
     Color(0xFF5D4037),
@@ -27,8 +32,15 @@ class BookCover extends StatelessWidget {
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(4),
-        border: Border(left: BorderSide(color: Colors.white.withValues(alpha: 0.35), width: 4)),
-        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(2, 2))],
+        border: Border(
+          left: BorderSide(
+            color: Colors.white.withValues(alpha: 0.35),
+            width: 4,
+          ),
+        ),
+        boxShadow: const [
+          BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(2, 2)),
+        ],
       ),
       padding: const EdgeInsets.all(10),
       child: Column(
@@ -50,7 +62,10 @@ class BookCover extends StatelessWidget {
             book.author,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 10),
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.85),
+              fontSize: 10,
+            ),
           ),
           const SizedBox(height: 4),
           Text(

@@ -79,8 +79,7 @@ class ReaderSettings {
 
   Color get background =>
       nightMode ? const Color(0xFF121212) : theme.background;
-  Color get textColor =>
-      nightMode ? const Color(0xFFE8E0D0) : theme.textColor;
+  Color get textColor => nightMode ? const Color(0xFFE8E0D0) : theme.textColor;
 
   static const _themeKey = 'reader_theme';
   static const _fontSizeKey = 'reader_font_size';

@@ -3,8 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:book_reader/services/book_parser.dart';
 
 void main() {
-  testWidgets('measured pagination fits every page and covers the text',
-      (tester) async {
+  testWidgets('measured pagination fits every page and covers the text', (
+    tester,
+  ) async {
     const lorem =
         'It was a bright cold day in April, and the clocks were striking thirteen. '
         'Winston Smith, his chin nuzzled into his breast in an effort to escape the '
@@ -62,8 +63,9 @@ void main() {
     }
   });
 
-  testWidgets('pagination handles empty text and a single long word',
-      (tester) async {
+  testWidgets('pagination handles empty text and a single long word', (
+    tester,
+  ) async {
     const style = TextStyle(fontSize: 18, height: 1.6);
     const size = Size(300, 400);
     expect(BookParser.paginateMeasured('', style, size).length, 1);

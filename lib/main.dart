@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'config.dart';
 import 'screens/library_screen.dart';
+import 'services/app_prefs.dart';
 import 'services/library_service.dart';
 
 void main() {
@@ -16,11 +17,13 @@ class BookReaderApp extends StatefulWidget {
 
 class _BookReaderAppState extends State<BookReaderApp> {
   final _library = LibraryService();
+  final _prefs = AppPrefs();
 
   @override
   void initState() {
     super.initState();
     _library.load();
+    _prefs.load();
   }
 
   @override
@@ -34,14 +37,14 @@ class _BookReaderAppState extends State<BookReaderApp> {
         fontFamily: 'serif',
       ),
       home: AnimatedBuilder(
-        animation: _library,
+        animation: Listenable.merge([_library, _prefs]),
         builder: (_, __) {
-          if (!_library.loaded) {
+          if (!_library.loaded || !_prefs.loaded) {
             return const Scaffold(
               body: Center(child: CircularProgressIndicator()),
             );
           }
-          return LibraryScreen(library: _library);
+          return LibraryScreen(library: _library, prefs: _prefs);
         },
       ),
     );

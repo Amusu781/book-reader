@@ -9,6 +9,47 @@ A quiet, library-vibe mobile book reader. Android first, built with Flutter
 so iOS can follow from the same codebase. Offline-first, no accounts,
 no backend, no paid services, no API keys.
 
+## What's new in v3 (0.3.0, 2026-11-25)
+
+Built from JayCrypt's bug-report video of 25 Nov 2026. Full notes: `V3_NOTES.md`;
+change list: `CHANGELOG.md`; headless renders: `docs/v3-previews/`.
+
+1. **A library room, real bookcases.** The library home is now a room
+   (wall, wainscot, floor, lamp light) with 3D bookcase furniture: side
+   panels, crown, plinth, a back panel with depth, shelf boards with a
+   front lip and shadow, and a brass name plate per case. Every shelf
+   (Currently Reading, Want to Read, Finished, Favourites, your own) is a
+   bookcase; a full board wraps onto the next board of the same case. The
+   **+** button builds a new bookcase. Scroll down to walk past them.
+   Books can be arranged **by series** or **by genre** (library settings →
+   Arrange bookcases, or Sort → Series). Book menu → **Edit details** sets
+   title, author, series, part number and genre. Drag-and-drop between
+   shelves works as before.
+2. **Realistic spines + Library style.** Spines are painted with cloth or
+   leather texture, a rounded-spine highlight, gold bands and foil title,
+   and varied heights, widths and colours. The **gear at the top right**
+   opens Library settings with a **Library style**: Modern (cloth spines,
+   light oak, plaster room), Classic (leather and gold, walnut, green
+   damask room), Ancient (cracked, worn leather with raised gilded bands,
+   dark timber with iron brackets, stone room with an arched window).
+   The choice is saved.
+3. **PDFs restyle like EPUBs.** On open, a PDF's text is extracted
+   (`syncfusion_flutter_pdf`, pure Dart, offline) into the same paged
+   reader as EPUB/TXT, so page style, font size, line spacing, night mode
+   and the leaf turn all apply. The result is cached next to the file
+   (`<file>.reflow.json`). The **Original PDF layout** button switches to
+   the page-image view (pdfx) and **Restyle text** switches back, carrying
+   your place across. Scanned PDFs with no text open in the original
+   layout automatically, with a short note.
+4. **Page turn folds to the left.** Going forward, the right-hand page
+   lifts and folds over to the left, showing its paper back; going back,
+   the previous page comes back in from the left. Opening a book plays the
+   same leftward fold as the cover opens.
+5. **Focus Mode on first launch.** The first launch asks "Read without
+   interruptions?" (Allow Focus Mode / Not now). Allow requests Do Not
+   Disturb access and turns Focus Mode on by default for every book. It
+   can be switched off any time in Library settings (saved).
+
 ## What the MVP does
 
 1. **Import books** — EPUB, PDF, TXT from device storage (file picker).
@@ -37,7 +78,7 @@ no backend, no paid services, no API keys.
    - "The Library at Dusk" as an EPUB (`assets/sample_books/the-library-at-dusk.epub`)
      — import it with the Import button to test EPUB parsing / TOC.
 
-## What is NOT in the MVP (v2, per spec)
+## Not built yet
 
 Accounts, social co-reading rooms, live page sync, voice chat, shared
 highlights/comments, MOBI/AZW3 conversion, a book store, real EPUB covers.
@@ -56,20 +97,30 @@ lib/
     book_parser.dart         EPUB (epubx) + TXT parsing, pagination, TOC
     reader_theme.dart        Crisp / Frayed / Ancient themes + settings
     focus_mode.dart          Immersive + DND via MethodChannel
+    app_prefs.dart           v3: library style, grouping, Focus Mode default
+    pdf_text.dart            v3: PDF text extraction + reflow cache
   screens/
-    library_screen.dart      Shelves, search, sort, grid, import
-    reader_screen.dart       Paged EPUB/TXT reader, settings, TOC
-    pdf_reader_screen.dart   PDF view (pdfx)
-  widgets/book_cover.dart    Generated cover (title/author, warm colours)
+    library_screen.dart      Library room, bookcases, settings sheet,
+                             edit details, Focus Mode onboarding
+    reader_screen.dart       Paged EPUB/TXT/PDF-text reader, settings, TOC
+    pdf_reader_screen.dart   Original PDF layout (pdfx)
+  widgets/
+    library_background.dart  v3: painted library room (3 styles)
+    bookshelf.dart           v3: 3D bookcase, boards, drag-and-drop
+    book_spine.dart          v3: painted cloth/leather spines
+    leaf_turn_view.dart      v3: leftward page fold
+    book_open_route.dart     v3: book-opening fold animation
+    book_cover.dart          Generated cover (title/author, warm colours)
 android/app/src/main/kotlin/.../MainActivity.kt
   MethodChannel "com.jaycrypt.readingroom/dnd":
   isDndGranted / requestDndAccess / setDnd
 assets/sample_books/         2 TXT samples + 1 EPUB sample
 ```
 
-## Build status (2026-11-20)
+## Build status (updated 2026-11-25, v3)
 
-- `flutter analyze` — **passes, "No issues found!"** (verified 2026-11-20).
+- `flutter analyze` — **passes, "No issues found!"** (v3, verified 2026-11-25).
+- `flutter test` — **27 tests, all passed** (v3, 2026-11-25).
 - `flutter pub get` — succeeds (69 dependencies resolved).
 - **No APK built yet — blocked by the sandbox, not by the code.**
   The Gradle daemon protocol is raw TCP on loopback between two JVM
@@ -134,3 +185,11 @@ to GitHub and the APK builds automatically on GitHub's runners:
    Galaxy A17, and install it.
 
 Or build locally on any normal PC: `flutter pub get && flutter analyze && flutter build apk --debug`.
+
+## Third-party licence note (v3)
+
+PDF text extraction uses `syncfusion_flutter_pdf`, distributed under the
+Syncfusion licence. It is free under the Syncfusion Community License for
+individuals and small businesses that meet its terms; check
+https://www.syncfusion.com/products/communitylicense before any commercial
+release.

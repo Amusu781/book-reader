@@ -52,9 +52,13 @@ class LibraryService extends ChangeNotifier {
   Future<void> _save() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
-        _booksKey, jsonEncode(books.map((b) => b.toJson()).toList()));
+      _booksKey,
+      jsonEncode(books.map((b) => b.toJson()).toList()),
+    );
     await prefs.setString(
-        _shelvesKey, jsonEncode(shelves.map((s) => s.toJson()).toList()));
+      _shelvesKey,
+      jsonEncode(shelves.map((s) => s.toJson()).toList()),
+    );
   }
 
   Future<Directory> get _booksDir async {
@@ -68,23 +72,29 @@ class LibraryService extends ChangeNotifier {
     final dir = await _booksDir;
     final samples = [
       ('The Library at Dusk', 'Muse (sample story)', 'the-library-at-dusk.txt'),
-      ('Pride and Prejudice (Excerpt)', 'Jane Austen', 'pride-and-prejudice.txt'),
+      (
+        'Pride and Prejudice (Excerpt)',
+        'Jane Austen',
+        'pride-and-prejudice.txt',
+      ),
     ];
     for (final (title, author, asset) in samples) {
       try {
         final data = await rootBundle.load('assets/sample_books/$asset');
         final file = File('${dir.path}/$asset');
         await file.writeAsBytes(data.buffer.asUint8List());
-        books.add(Book(
-          id: 'sample-$asset',
-          title: title,
-          author: author,
-          filePath: file.path,
-          format: BookFormat.txt,
-          shelfId: 'want',
-          addedAtMillis: DateTime.now().millisecondsSinceEpoch,
-          order: _nextOrder('want'),
-        ));
+        books.add(
+          Book(
+            id: 'sample-$asset',
+            title: title,
+            author: author,
+            filePath: file.path,
+            format: BookFormat.txt,
+            shelfId: 'want',
+            addedAtMillis: DateTime.now().millisecondsSinceEpoch,
+            order: _nextOrder('want'),
+          ),
+        );
       } catch (_) {
         // A missing sample must not break first launch.
       }
@@ -122,20 +132,26 @@ class LibraryService extends ChangeNotifier {
     if (format == BookFormat.unknown) return 'Unsupported file type.';
     final dir = await _booksDir;
     final baseName = picked.path.split('/').last;
-    final dest = File('${dir.path}/${DateTime.now().millisecondsSinceEpoch}_$baseName');
+    final dest = File(
+      '${dir.path}/${DateTime.now().millisecondsSinceEpoch}_$baseName',
+    );
     await picked.copy(dest.path);
-    final title = baseName.replaceAll(RegExp(r'\.(epub|pdf|txt)$', caseSensitive: false), '')
-        .replaceAll(RegExp(r'[_\-]+'), ' ').trim();
-    books.add(Book(
-      id: 'book-${DateTime.now().millisecondsSinceEpoch}',
-      title: title.isEmpty ? baseName : title,
-      author: 'Unknown author',
-      filePath: dest.path,
-      format: format,
-      shelfId: 'want',
-      addedAtMillis: DateTime.now().millisecondsSinceEpoch,
-      order: _nextOrder('want'),
-    ));
+    final title = baseName
+        .replaceAll(RegExp(r'\.(epub|pdf|txt)$', caseSensitive: false), '')
+        .replaceAll(RegExp(r'[_\-]+'), ' ')
+        .trim();
+    books.add(
+      Book(
+        id: 'book-${DateTime.now().millisecondsSinceEpoch}',
+        title: title.isEmpty ? baseName : title,
+        author: 'Unknown author',
+        filePath: dest.path,
+        format: format,
+        shelfId: 'want',
+        addedAtMillis: DateTime.now().millisecondsSinceEpoch,
+        order: _nextOrder('want'),
+      ),
+    );
     await _save();
     notifyListeners();
     return null;
@@ -144,7 +160,9 @@ class LibraryService extends ChangeNotifier {
   Future<void> addShelf(String name) async {
     final clean = name.trim();
     if (clean.isEmpty) return;
-    shelves.add(Shelf(id: 'shelf-${DateTime.now().millisecondsSinceEpoch}', name: clean));
+    shelves.add(
+      Shelf(id: 'shelf-${DateTime.now().millisecondsSinceEpoch}', name: clean),
+    );
     await _save();
     notifyListeners();
   }
@@ -162,8 +180,7 @@ class LibraryService extends ChangeNotifier {
   /// displayed shelf to insert *before*; [index] == shelf length means
   /// append at the end. Orders on the affected shelf are renumbered
   /// and persisted.
-  Future<void> moveBookToPosition(
-      Book book, String shelfId, int index) async {
+  Future<void> moveBookToPosition(Book book, String shelfId, int index) async {
     final full = booksOnShelf(shelfId);
     final draggedIndex = full.indexWhere((b) => b.id == book.id);
     final target = full.where((b) => b.id != book.id).toList();
@@ -188,6 +205,9 @@ class LibraryService extends ChangeNotifier {
     try {
       final f = File(book.filePath);
       if (await f.exists() && !book.id.startsWith('sample-')) await f.delete();
+      // v3: the cached PDF-to-text conversion goes with the book.
+      final cache = File('${book.filePath}.reflow.json');
+      if (await cache.exists()) await cache.delete();
     } catch (_) {}
     await _save();
     notifyListeners();
@@ -211,13 +231,100 @@ class LibraryService extends ChangeNotifier {
   }
 
   Future<void> addHighlight(Book book, int page, String snippet) async {
-    book.highlights.add(Highlight(
-      page: page,
-      snippet: snippet,
-      createdAtMillis: DateTime.now().millisecondsSinceEpoch,
-    ));
+    book.highlights.add(
+      Highlight(
+        page: page,
+        snippet: snippet,
+        createdAtMillis: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
     await _save();
     notifyListeners();
+  }
+
+  /// Edit a book's details (title, author, series, part number, genre).
+  Future<void> updateBookDetails(
+    Book book, {
+    required String title,
+    required String author,
+    required String series,
+    required double? seriesIndex,
+    required String genre,
+  }) async {
+    if (title.trim().isNotEmpty) book.title = title.trim();
+    book.author = author.trim().isEmpty ? 'Unknown author' : author.trim();
+    book.series = series.trim();
+    book.seriesIndex = book.series.isEmpty ? null : seriesIndex;
+    book.genre = genre.trim();
+    await _save();
+    notifyListeners();
+  }
+
+  /// Every series name in the library, A–Z.
+  List<String> get allSeries {
+    final set = books
+        .map((b) => b.series)
+        .where((s) => s.isNotEmpty)
+        .toSet()
+        .toList();
+    set.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return set;
+  }
+
+  /// Every genre in the library, A–Z.
+  List<String> get allGenres {
+    final set = books
+        .map((b) => b.genre)
+        .where((g) => g.isNotEmpty)
+        .toSet()
+        .toList();
+    set.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return set;
+  }
+
+  /// Books grouped by series: each series in reading order (part 1,
+  /// 2, 3…), then a final "Not in a series" group.
+  List<(String, List<Book>)> groupBySeries() {
+    final groups = <(String, List<Book>)>[];
+    for (final name in allSeries) {
+      final list = books.where((b) => b.series == name).toList()
+        ..sort(compareSeriesOrder);
+      groups.add((name, list));
+    }
+    final rest = books.where((b) => b.series.isEmpty).toList()
+      ..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+    if (rest.isNotEmpty) groups.add(('Not in a series', rest));
+    return groups;
+  }
+
+  /// Books grouped by genre (series kept together, in order, inside
+  /// each genre), then "No genre yet".
+  List<(String, List<Book>)> groupByGenre() {
+    final groups = <(String, List<Book>)>[];
+    for (final name in allGenres) {
+      final list = books.where((b) => b.genre == name).toList()
+        ..sort(compareSeriesOrder);
+      groups.add((name, list));
+    }
+    final rest = books.where((b) => b.genre.isEmpty).toList()
+      ..sort(compareSeriesOrder);
+    if (rest.isNotEmpty) groups.add(('No genre yet', rest));
+    return groups;
+  }
+
+  /// Series first (by series name, then part number), then title.
+  static int compareSeriesOrder(Book a, Book b) {
+    final sa = a.series.toLowerCase(), sb = b.series.toLowerCase();
+    if (sa.isNotEmpty || sb.isNotEmpty) {
+      if (sa.isEmpty) return 1;
+      if (sb.isEmpty) return -1;
+      final c = sa.compareTo(sb);
+      if (c != 0) return c;
+      final ia = a.seriesIndex ?? double.maxFinite;
+      final ib = b.seriesIndex ?? double.maxFinite;
+      if (ia != ib) return ia.compareTo(ib);
+    }
+    return a.title.toLowerCase().compareTo(b.title.toLowerCase());
   }
 
   List<Book> booksOnShelf(String shelfId) {
@@ -230,9 +337,13 @@ class LibraryService extends ChangeNotifier {
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return books;
     return books
-        .where((b) =>
-            b.title.toLowerCase().contains(q) ||
-            b.author.toLowerCase().contains(q))
+        .where(
+          (b) =>
+              b.title.toLowerCase().contains(q) ||
+              b.author.toLowerCase().contains(q) ||
+              b.series.toLowerCase().contains(q) ||
+              b.genre.toLowerCase().contains(q),
+        )
         .toList();
   }
 }

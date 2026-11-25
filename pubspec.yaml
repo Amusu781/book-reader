@@ -1,7 +1,7 @@
 name: book_reader
 description: "The Reading Room (placeholder name) — a quiet, library-vibe mobile book reader. Android-first MVP: EPUB/PDF/TXT, shelves, 3 page themes, Focus Mode."
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.3.0+3
 
 environment:
   sdk: ^3.9.0
@@ -15,6 +15,7 @@ dependencies:
   shared_preferences: ^2.5.3
   epubx: ^4.0.0
   pdfx: ^2.9.0
+  syncfusion_flutter_pdf: ^31.2.18
 
 dev_dependencies:
   flutter_test:

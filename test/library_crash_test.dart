@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:book_reader/models/book.dart';
 import 'package:book_reader/screens/library_screen.dart';
+import 'package:book_reader/services/app_prefs.dart';
 import 'package:book_reader/services/library_service.dart';
 
 LibraryService _libraryWithBooks() {
@@ -46,15 +47,23 @@ LibraryService _libraryWithBooks() {
     ..loaded = true;
 }
 
+AppPrefs _onboardedPrefs() => AppPrefs()
+  ..loaded = true
+  ..focusOnboardingDone = true;
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('library home renders shelves and spines',
-      (tester) async {
+  testWidgets('library home renders shelves and spines', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(home: LibraryScreen(library: _libraryWithBooks())),
+      MaterialApp(
+        home: LibraryScreen(
+          library: _libraryWithBooks(),
+          prefs: _onboardedPrefs(),
+        ),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -65,18 +74,22 @@ void main() {
     expect(find.text('Neuromancer'), findsOneWidget);
   });
 
-  testWidgets('long-press drag reorders a spine without crashing',
-      (tester) async {
+  testWidgets('long-press drag reorders a spine without crashing', (
+    tester,
+  ) async {
     final library = _libraryWithBooks();
     await tester.pumpWidget(
-      MaterialApp(home: LibraryScreen(library: library)),
+      MaterialApp(
+        home: LibraryScreen(library: library, prefs: _onboardedPrefs()),
+      ),
     );
     await tester.pumpAndSettle();
 
     // Long-press Dune, wait past the 250ms drag delay, drag right
     // across Foundation's slot, release.
-    final gesture =
-        await tester.startGesture(tester.getCenter(find.text('Dune')));
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.text('Dune')),
+    );
     await tester.pump(const Duration(milliseconds: 300));
     await gesture.moveBy(const Offset(60, 0));
     await tester.pump();
@@ -91,7 +104,12 @@ void main() {
 
   testWidgets('plain long-press opens the book menu', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(home: LibraryScreen(library: _libraryWithBooks())),
+      MaterialApp(
+        home: LibraryScreen(
+          library: _libraryWithBooks(),
+          prefs: _onboardedPrefs(),
+        ),
+      ),
     );
     await tester.pumpAndSettle();
 

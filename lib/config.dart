@@ -4,5 +4,5 @@
 class AppConfig {
   static const String name = 'The Reading Room';
   static const String tagline = 'A quiet library, in your pocket.';
-  static const String version = '0.1.0-mvp';
+  static const String version = '0.3.0-v3';
 }

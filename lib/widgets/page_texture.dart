@@ -182,14 +182,10 @@ class _PageTexturePainter extends CustomPainter {
       final r = 18 + rng.nextDouble() * 46;
       final alpha = 0.05 + rng.nextDouble() * 0.05;
       final paint = Paint()
-        ..shader = ui.Gradient.radial(
-          Offset(cx, cy),
-          r,
-          [
-            Color(0xFF8B6F47).withValues(alpha: alpha),
-            Color(0xFF8B6F47).withValues(alpha: 0),
-          ],
-        );
+        ..shader = ui.Gradient.radial(Offset(cx, cy), r, [
+          Color(0xFF8B6F47).withValues(alpha: alpha),
+          Color(0xFF8B6F47).withValues(alpha: 0),
+        ]);
       canvas.drawCircle(Offset(cx, cy), r, paint);
     }
 
@@ -201,14 +197,10 @@ class _PageTexturePainter extends CustomPainter {
     canvas.drawRect(
       Rect.fromLTWH(0, 0, 30, size.height),
       Paint()
-        ..shader = ui.Gradient.linear(
-          const Offset(0, 0),
-          const Offset(30, 0),
-          [
-            Colors.black.withValues(alpha: strength),
-            Colors.black.withValues(alpha: 0),
-          ],
-        ),
+        ..shader = ui.Gradient.linear(const Offset(0, 0), const Offset(30, 0), [
+          Colors.black.withValues(alpha: strength),
+          Colors.black.withValues(alpha: 0),
+        ]),
     );
   }
 
