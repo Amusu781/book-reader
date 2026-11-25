@@ -1,0 +1,31 @@
+name: Temporary v3 update
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Replace repo contents with v3 source
+        run: |
+          set -euxo pipefail
+          ls -la
+          test -f book-reader-v3-src.zip
+          unzip -o book-reader-v3-src.zip
+          ls -la book-reader
+          rsync -a --delete --exclude=.git --exclude=book-reader --exclude=book-reader-v3-src.zip --exclude=.github/workflows/temp-update-v3.yml --exclude=LICENSE book-reader/ ./
+          rm -rf book-reader book-reader-v3-src.zip .github/workflows/temp-update-v3.yml
+          ls -la
+          git status --short
+      - name: Commit v3 update
+        run: |
+          set -euxo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git status --short
+          git diff --cached --stat
+          git commit -m "Update book-reader to v3" || echo "Nothing to commit"
+          git push
